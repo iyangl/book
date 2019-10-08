@@ -37,27 +37,66 @@
       if (command == null)
           throw new NullPointerException();
       int c = ctl.get();
+      // 有效的线程数小于核心线程数
       if (workerCountOf(c) < corePoolSize) {
+          // 将 command 作为核心任务加入队列
           if (addWorker(command, true))
               return;
+          // 加入队列失败，重新读 ctl
           c = ctl.get();
       }
+      // ctl 状态为 RUNNING，任务队列中有容量可以插入命令
       if (isRunning(c) && workQueue.offer(command)) {
+          // 再次重新读 ctl
           int recheck = ctl.get();
-          if (!isRunning(recheck) && remove(command))
-              reject(command);
-          else if (workerCountOf(recheck) == 0)
+          // 若线程池状态不为 RUNNING，workQueue 中移除任务
+          if (!isRunning(recheck) && remove(command)) {
+              // 拒绝任务
+            reject(command);
+              // 线程池有效线程数为 0
+          } else if (workerCountOf(recheck) == 0) {
               addWorker(null, false);
-      } else if (!addWorker(command, false))
+          }
+          // 二次判断，任务作为非核心任务加入队列，失败时拒绝任务
+      } else if (!addWorker(command, false)) {
+          // 拒绝任务
           reject(command);
+      }
+  }
+  ```
+  
+* `ThreadPoolExecutor` 中  `ctl` 变量
+
+  ```java
+  private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
+  // 低 29 位存储有效线程数
+  private static final int COUNT_BITS = Integer.SIZE - 3;
+  // 1 左移 29 位 - 1 ==> 2 ^ 29 - 1
+  // 00011111111111111111111111111111
+  private static final int CAPACITY = (1 << COUNT_BITS) - 1;
+  
+  // runState is stored in the high-order bits
+  // 高 3 位存储线程池状态。
+  // 因为有 5 种状态，所以需要 3 位用来存储。
+  private static final int RUNNING = -1 << COUNT_BITS;
+  private static final int SHUTDOWN = 0 << COUNT_BITS;
+  private static final int STOP = 1 << COUNT_BITS;
+  private static final int TIDYING = 2 << COUNT_BITS;
+  private static final int TERMINATED = 3 << COUNT_BITS;
+  
+  // Packing and unpacking ctl
+  // c 与上 CAPACITY 取反，得到高三位线程池状态
+  private static int runStateOf(int c) {
+  	return c & ~CAPACITY;
+  }
+  
+  // c 与上 CAPACITY，得到低 29 位有效线程数
+  private static int workerCountOf(int c) {
+  	return c & CAPACITY;
   }
   ```
 
-  
-
-
-
-
+* 
 
 
 
